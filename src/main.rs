@@ -2,6 +2,7 @@ use std::{io, os::fd::AsRawFd};
 use std::io::Read;
 // use std::os::unix::io::RawFd;
 use termios::*;
+use std::io::{stdout, Write};
 
 // enable terminal raw mode
 fn enable_raw_mode() -> Result<Termios, std::io::Error> {
@@ -11,8 +12,8 @@ fn enable_raw_mode() -> Result<Termios, std::io::Error> {
 
   termios.c_cflag |= CS8;
   // termios.c_cflag &= !(CSIZE | PARENB);
-  //termios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-  termios.c_lflag &= !(ECHO | ICANON | ISIG | IEXTEN);
+  termios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+  // termios.c_lflag &= !(ECHO | ICANON | ISIG | IEXTEN);
   termios.c_oflag &= !OPOST;
   //termios.c_iflag &= !(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
   termios.c_iflag &= !(BRKINT | ISTRIP | INLCR | ICRNL | IXON);
@@ -31,15 +32,19 @@ fn disable_raw_mode(mut termios_orig: &Termios) {
 
 // main function
 fn main() {
-    let termios_orig = enable_raw_mode().unwrap();
+    let mut termios_orig = enable_raw_mode().unwrap();
 
-    loop {
+    'outer_loop: loop {
         // read chars 1 byte at a time
         for i in io::stdin().bytes() {
             let c: char = i.unwrap() as char;
-            print!("{}", c);
+            // println!("Printing: {}", c);
+            // print!("{}", c);
+            let mut lock = stdout().lock();
+            write!(lock, "{}", c).unwrap();
+            stdout().flush().unwrap();
             if c == 'q' {
-                break;
+                break 'outer_loop;
             }
         }
     }
