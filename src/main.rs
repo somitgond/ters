@@ -1,30 +1,58 @@
-use std::io::Read;
-use std::{io, os::fd::AsRawFd};
-// use std::os::unix::io::RawFd;
-use std::io::{Write, stdout};
+use std::os::fd::AsRawFd;
+use std::io::{Read, Write, stdout, stdin};
 use termios::*;
 
-// enable terminal raw mode
-fn enable_raw_mode() -> Result<Termios, std::io::Error> {
-    let stdin = io::stdin().as_raw_fd();
-    let mut termios = Termios::from_fd(stdin)?;
-    let termios_orig = termios.clone();
-
-    termios.c_cflag |= CS8;
-    termios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    termios.c_oflag &= !OPOST;
-    termios.c_iflag &= !(BRKINT | ISTRIP | INLCR | ICRNL | IXON);
-
-    termios.c_cc[VMIN] = 0;
-    termios.c_cc[VTIME] = 1;
-    let _ = tcsetattr(stdin, TCSAFLUSH, &mut termios);
-
-    Ok(termios_orig)
+// EditorState: Structure to store termios and other states
+struct EditorState {
+    termios_orig : Termios,
+    width: i32,
+    height: i32,
 }
 
-fn disable_raw_mode(mut termios_orig: &Termios) {
-    let stdin = io::stdin().as_raw_fd();
-    let _ = tcsetattr(stdin, TCSAFLUSH, &mut termios_orig);
+impl EditorState {
+    // enable terminal raw mode
+    fn enable_raw_mode(&self) {
+        let mut termios = self.termios_orig.clone();
+        let stdin_fd = stdin().as_raw_fd();
+
+        termios.c_cflag |= CS8;
+        termios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+        termios.c_oflag &= !OPOST;
+        termios.c_iflag &= !(BRKINT | ISTRIP | INLCR | ICRNL | IXON);
+
+        termios.c_cc[VMIN] = 0;
+        termios.c_cc[VTIME] = 1;
+        let _ = tcsetattr(stdin_fd, TCSAFLUSH, &mut termios);
+    }
+
+    // disable terminal raw mode
+    fn disable_raw_mode(&mut self) {
+        let stdin_fd = stdin().as_raw_fd();
+        let _ = tcsetattr(stdin_fd, TCSAFLUSH, &mut self.termios_orig);
+    }
+
+    // get window size
+    fn get_window_size(&mut self) {
+        write("\x1b[999C\x1b[999B");
+        write("\x1b[6n");
+        write("\r\n");
+        for _ in 0..32 {
+            for i in stdin().bytes() {
+                let c: char = i.unwrap() as char;
+                write(&c.to_string());
+            }
+        }
+    }
+}
+
+// implement drop trait
+impl Drop for EditorState {
+    fn drop(&mut self) {
+        // clear screen and position cursor at top
+        clear_screen();
+        reposition_cursor();
+        self.disable_raw_mode();
+    }
 }
 
 fn write(s: &str) {
@@ -37,15 +65,24 @@ fn clear_screen() {
     write("\x1b[2J");
 }
 
-// main function
-fn main() {
-    let mut termios_orig = enable_raw_mode().unwrap();
+fn reposition_cursor() {
+    write("\x1b[H");
+}
 
+fn draw_rows() {
+    for i in 0..30 {
+        write("~\r\n");
+    }
+}
+
+fn run_editor(global_state: &EditorState) {
     clear_screen();
+    reposition_cursor();
+    draw_rows();
+    reposition_cursor();
 
     'outer_loop: loop {
-        // read bytes from stdin
-        for i in io::stdin().bytes() {
+        for i in stdin().bytes() {
             let c: char = i.unwrap() as char;
 
             write(&c.to_string());
@@ -55,5 +92,28 @@ fn main() {
             }
         }
     }
-    disable_raw_mode(&mut termios_orig);
 }
+
+// main function
+fn main() {
+    let stdin_fd = stdin().as_raw_fd();
+
+    // Load termios
+    let mut global_state: EditorState  = EditorState {
+        termios_orig : Termios::from_fd(stdin_fd).unwrap(),
+        height: 0,
+        width: 0,
+    };
+
+    // enable raw mode
+    global_state.enable_raw_mode();
+    global_state.get_window_size();
+
+    // finally run editor main loop
+    run_editor(&mut global_state);
+}
+
+
+// FIXME:
+// 1. Disable raw mode at program exit (in case of panic and normal exit)
+// 2. Logger
