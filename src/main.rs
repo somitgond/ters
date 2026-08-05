@@ -34,33 +34,29 @@ impl EditorState {
     // get window size
     fn get_window_size(&mut self) {
         write("\x1b[999C\x1b[999B\x1b[6n\r\n");
-        // write("\x1b[6n\r\n");
-        let mut nCharsRead = 0;
-        // FIXME; based on terminal width/height buffer size can increase/decrease
-        let mut buffer = [0; 9];
-        let _ = stdin().read_exact(&mut buffer).unwrap();
-        let mut s = String::new();
         let mut semicolon = false;
         let mut sq = false;
-        let mut width: i32 = 0;
-        let mut height: i32 = 0;
-        for i in buffer {
-            if i == 82 {
+        let mut rows: i32 = 0;
+        let mut cols: i32 = 0;
+
+        loop {
+            let mut buf = [0;1];
+            let _ = stdin().read_exact(&mut buf).unwrap();
+            if buf[0] == 82 {
                 break;
-            } else if i == 59 {
+            } else if buf[0] == 59 {
                 semicolon = true;
-            } else if i == 91 {
+            } else if buf[0] == 91 {
                 sq = true;
             } else if sq && !semicolon {
-                width = width *10 + (i - 48) as i32;
+                rows = rows *10 + (buf[0] - 48) as i32;
             } else if sq && semicolon {
-                height = height*10 + (i - 48) as i32;
+                cols = cols*10 + (buf[0] - 48) as i32;
             }
         }
 
-        self.rows = width;
-        self.cols = height;
-        // println!("w: {}, h: {}", width, height);
+        self.rows = rows;
+        self.cols = cols;
     }
 }
 
