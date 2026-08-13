@@ -4,6 +4,8 @@ use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
 use termios::*;
 
+use crate::myLogger::*;
+
 // EditorState: Structure to store termios and other states
 pub struct EditorState {
     pub termios_orig: Termios,
@@ -15,11 +17,14 @@ pub struct EditorState {
     pub num_rows: i32,         // number of rows of data available
     pub row_data: String,      // data per row, FIXME: should be vector of num_rows
     pub status_string: String, // status line string
+
+    pub logger_object: MyLogger, // logger object
+
 }
 
 impl EditorState {
     // enable terminal raw mode
-    pub fn enable_raw_mode(&self) {
+    pub fn enable_raw_mode(&mut self) {
         let mut termios = self.termios_orig.clone();
         let stdin_fd = stdin().as_raw_fd();
 
@@ -31,17 +36,21 @@ impl EditorState {
         termios.c_cc[VMIN] = 0;
         termios.c_cc[VTIME] = 1;
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut termios);
+
+        self.logger_object.log("Enabled Raw Mode");
     }
 
     // disable terminal raw mode
     pub fn disable_raw_mode(&mut self) {
         let stdin_fd = stdin().as_raw_fd();
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut self.termios_orig);
+        self.logger_object.log("Disabled Raw Mode");
     }
 
     // get window size
     pub fn get_window_size(&mut self) {
         write("\x1b[999C\x1b[999B\x1b[6n\r\n");
+
 
         // has semicolon has been encountered
         let mut semicolon = false;
@@ -71,6 +80,8 @@ impl EditorState {
 
         self.rows = rows;
         self.cols = cols;
+        self.logger_object.log(&format!("Get Window Size:: row: {}, cols: {}", rows, cols));
+        write("\x1b[0C\x1b[0B");
     }
 }
 
@@ -84,6 +95,7 @@ impl Drop for EditorState {
         self.cy = 0;
         reposition_cursor(self);
         self.disable_raw_mode();
+        self.logger_object.log("Disabled raw mode");
     }
 }
 
@@ -95,6 +107,7 @@ pub fn write(s: &str) {
 
 pub fn clear_screen() {
     write("\x1b[2J");
+    write("\x1b[H");
 }
 
 pub fn reposition_cursor(global_state: &EditorState) {
@@ -113,7 +126,7 @@ pub fn draw_rows(global_state: &mut EditorState) {
         // if row data exists, show data first
         if y >= global_state.num_rows {
             // show editor version at startup
-            if y == global_state.rows / 2 {
+            if global_state.num_rows == 0 && y == global_state.rows / 2 {
                 let s = String::from("Text Editor in RuSt -- version 0.1");
                 // center the welcome message
                 let slen: i32 = s.len() as i32;
@@ -124,7 +137,10 @@ pub fn draw_rows(global_state: &mut EditorState) {
                     }
                 }
                 buffer_text.push_str(&s);
-                buffer_text.push_str(&format!("cols: {}, cols: {}", global_state.rows, global_state.cols));
+                buffer_text.push_str(&format!(
+                    "cols: {}, cols: {}",
+                    global_state.rows, global_state.cols
+                ));
             } else {
                 buffer_text.push('~');
             }
@@ -164,7 +180,7 @@ pub fn run_editor(global_state: &mut EditorState) {
 
     clear_screen();
     hide_cursor();
-    global_state.get_window_size();
+    //global_state.get_window_size();
     draw_rows(global_state);
     reposition_cursor(global_state);
     show_cursor();
@@ -175,15 +191,20 @@ pub fn run_editor(global_state: &mut EditorState) {
 
             match c {
                 'q' => break 'outer_loop,
+                'a' => global_state.cx-=1,
+                'd' => global_state.cx+=1,
+                'w' => global_state.cy-=1,
+                's' => global_state.cy-=1,
                 _ => global_state.buffer_text.push(c),
             }
-            //hide_cursor();
+            hide_cursor();
+            clear_screen();
             global_state.get_window_size();
-            draw_rows(global_state);
-            reposition_cursor(global_state);
-            write(&(c.to_string()));
             global_state.row_data.push(c);
-            //show_cursor();
+            global_state.cx += 1;
+            //draw_rows(global_state);
+            reposition_cursor(global_state);
+            show_cursor();
         }
     }
 }
@@ -198,10 +219,8 @@ pub fn editor_open(filename: &str, global_state: &mut EditorState) {
 
 // create editor state
 pub fn create_editor_state() -> EditorState {
-    let stdin_fd = stdin().as_raw_fd();
-
     EditorState {
-        termios_orig: Termios::from_fd(stdin_fd).unwrap(),
+        termios_orig: Termios::from_fd(stdin().as_raw_fd()).unwrap(),
         rows: 0,
         cols: 0,
         buffer_text: String::new(),
@@ -210,5 +229,6 @@ pub fn create_editor_state() -> EditorState {
         num_rows: 0,
         row_data: String::new(),
         status_string: String::new(),
+        logger_object: create_logger("log.txt"),
     }
 }

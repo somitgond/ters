@@ -1,11 +1,10 @@
 use std::env;
 use std::process::exit;
 
-mod myLogger;
-use myLogger::*;
-
 mod myEditor;
 use myEditor::*;
+
+mod myLogger;
 
 fn main() {
     // command line arguments
@@ -19,9 +18,6 @@ fn main() {
     // Load termios
     let mut global_state = create_editor_state();
     editor_open(&args[1], &mut global_state);
-
-    let mut logger_object = create_logger("log.txt");
-    logger_object.log("This is awesome");
 
     // finally run editor main loop
     run_editor(&mut global_state);
