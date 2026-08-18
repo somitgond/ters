@@ -19,7 +19,6 @@ pub struct EditorState {
     pub status_string: String, // status line string
 
     pub logger_object: MyLogger, // logger object
-
 }
 
 impl EditorState {
@@ -37,14 +36,16 @@ impl EditorState {
         termios.c_cc[VTIME] = 1;
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut termios);
 
-        self.logger_object.log("Enabled Raw Mode", LogLevel::INFORMATIONAL);
+        self.logger_object
+            .log("Enabled Raw Mode", LogLevel::INFORMATIONAL);
     }
 
     // disable terminal raw mode
     pub fn disable_raw_mode(&mut self) {
         let stdin_fd = stdin().as_raw_fd();
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut self.termios_orig);
-        self.logger_object.log("Disabled Raw Mode", LogLevel::INFORMATIONAL);
+        self.logger_object
+            .log("Disabled Raw Mode", LogLevel::INFORMATIONAL);
     }
 
     // get window size
@@ -79,7 +80,10 @@ impl EditorState {
 
         self.rows = rows;
         self.cols = cols;
-        self.logger_object.log(&format!("Get Window Size:: row: {}, cols: {}", rows, cols), LogLevel::INFORMATIONAL);
+        self.logger_object.log(
+            &format!("Get Window Size:: row: {}, cols: {}", rows, cols),
+            LogLevel::INFORMATIONAL,
+        );
         write("\x1b[0C\x1b[0B");
     }
 }
@@ -94,7 +98,8 @@ impl Drop for EditorState {
         self.cy = 0;
         reposition_cursor(self);
         self.disable_raw_mode();
-        self.logger_object.log("Drop called: Disabled raw mode", LogLevel::INFORMATIONAL);
+        self.logger_object
+            .log("Drop called: Disabled raw mode", LogLevel::INFORMATIONAL);
     }
 }
 
@@ -190,10 +195,10 @@ pub fn run_editor(global_state: &mut EditorState) {
 
             match c {
                 'q' => break 'outer_loop,
-                'a' => global_state.cx-=1,
-                'd' => global_state.cx+=1,
-                'w' => global_state.cy-=1,
-                's' => global_state.cy-=1,
+                'a' => global_state.cx -= 1,
+                'd' => global_state.cx += 1,
+                'w' => global_state.cy -= 1,
+                's' => global_state.cy -= 1,
                 _ => global_state.buffer_text.push(c),
             }
             hide_cursor();
@@ -209,10 +214,15 @@ pub fn run_editor(global_state: &mut EditorState) {
 }
 
 // open file and fill row values
-pub fn editor_open(filename: &str, global_state: &mut EditorState) {
+pub fn editor_open_file(filename: &str, global_state: &mut EditorState) {
     let contents = fs::read_to_string(filename).expect("Invalid file");
 
     global_state.row_data = contents[0..10].to_string();
+    global_state.num_rows = 1;
+}
+
+pub fn editor_open(global_state: &mut EditorState) {
+    global_state.row_data = String::from("Hello world");
     global_state.num_rows = 1;
 }
 
