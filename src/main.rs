@@ -1,10 +1,10 @@
 use std::env;
 use std::process::exit;
 
-mod myEditor;
-use myEditor::*;
+mod my_editor;
+use my_editor::*;
 
-mod myLogger;
+mod my_logger;
 
 fn main() {
     // command line arguments

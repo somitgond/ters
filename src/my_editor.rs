@@ -4,7 +4,7 @@ use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
 use termios::*;
 
-use crate::myLogger::*;
+use crate::my_logger::*;
 
 // EditorState: Structure to store termios and other states
 pub struct EditorState {
@@ -37,20 +37,19 @@ impl EditorState {
         termios.c_cc[VTIME] = 1;
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut termios);
 
-        self.logger_object.log("Enabled Raw Mode");
+        self.logger_object.log("Enabled Raw Mode", LogLevel::INFORMATIONAL);
     }
 
     // disable terminal raw mode
     pub fn disable_raw_mode(&mut self) {
         let stdin_fd = stdin().as_raw_fd();
         let _ = tcsetattr(stdin_fd, TCSANOW, &mut self.termios_orig);
-        self.logger_object.log("Disabled Raw Mode");
+        self.logger_object.log("Disabled Raw Mode", LogLevel::INFORMATIONAL);
     }
 
     // get window size
     pub fn get_window_size(&mut self) {
         write("\x1b[999C\x1b[999B\x1b[6n\r\n");
-
 
         // has semicolon has been encountered
         let mut semicolon = false;
@@ -80,7 +79,7 @@ impl EditorState {
 
         self.rows = rows;
         self.cols = cols;
-        self.logger_object.log(&format!("Get Window Size:: row: {}, cols: {}", rows, cols));
+        self.logger_object.log(&format!("Get Window Size:: row: {}, cols: {}", rows, cols), LogLevel::INFORMATIONAL);
         write("\x1b[0C\x1b[0B");
     }
 }
@@ -95,7 +94,7 @@ impl Drop for EditorState {
         self.cy = 0;
         reposition_cursor(self);
         self.disable_raw_mode();
-        self.logger_object.log("Disabled raw mode");
+        self.logger_object.log("Drop called: Disabled raw mode", LogLevel::INFORMATIONAL);
     }
 }
 
@@ -229,6 +228,6 @@ pub fn create_editor_state() -> EditorState {
         num_rows: 0,
         row_data: String::new(),
         status_string: String::new(),
-        logger_object: create_logger("log.txt"),
+        logger_object: create_logger("log.txt", LogLevel::INFORMATIONAL),
     }
 }
