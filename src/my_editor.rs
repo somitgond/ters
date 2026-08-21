@@ -9,14 +9,19 @@ use crate::my_logger::*;
 // EditorState: Structure to store termios and other states
 pub struct EditorState {
     pub termios_orig: Termios,
-    pub rows: i32,             // total rows in the terminal
-    pub cols: i32,             // total columns in the terminal
-    pub buffer_text: String,   // buffer text to display
-    pub cx: i32,               // current row value
-    pub cy: i32,               // current cols value
+    pub rows: i32,           // total rows in the terminal
+    pub cols: i32,           // total columns in the terminal
+    pub buffer_text: String, // buffer text to display
+
+    pub cx: i32, // current row value
+    pub cy: i32, // current cols value
+
     pub num_rows: i32,         // number of rows of data available
-    pub row_data: String,      // data per row, FIXME: should be vector of num_rows
+    pub row_data: Vec<String>,      // data per row, FIXME: should be vector of num_rows
     pub status_string: String, // status line string
+
+    pub x_offset: i32, // denote vertical scroll offset
+    pub y_offset: i32, // denote horizontal scroll offset
 
     pub logger_object: MyLogger, // logger object
 }
@@ -62,6 +67,7 @@ impl EditorState {
             let mut buf = [0; 1];
             let _ = stdin().read_exact(&mut buf).unwrap();
 
+            // FIXME: handle ctrl sequences
             match buf[0] {
                 82 => break,
                 59 => semicolon = true,
@@ -84,7 +90,7 @@ impl EditorState {
             &format!("Get Window Size:: row: {}, cols: {}", rows, cols),
             LogLevel::INFORMATIONAL,
         );
-        write("\x1b[0C\x1b[0B");
+        set_cursor_pos(0, 0);
     }
 }
 
@@ -115,10 +121,14 @@ pub fn clear_screen() {
 }
 
 pub fn reposition_cursor(global_state: &EditorState) {
+    set_cursor_pos(global_state.cx, global_state.cy);
+}
+
+pub fn set_cursor_pos(x: i32, y: i32) {
     let mut s = String::from("\x1b[");
-    s.push_str(&(global_state.cy + 1).to_string());
+    s.push_str(&(y + 1).to_string());
     s.push_str(";");
-    s.push_str(&(global_state.cx + 1).to_string());
+    s.push_str(&(x + 1).to_string());
     s.push_str("H");
 
     write(&s);
@@ -149,14 +159,14 @@ pub fn draw_rows(global_state: &mut EditorState) {
                 buffer_text.push('~');
             }
         } else {
-            let mut len = global_state.row_data.len() as i32;
+            let mut len = global_state.row_data[0].len() as i32;
 
             // if data length is > than cols
             if len > global_state.cols {
                 len = global_state.cols;
             }
 
-            buffer_text.push_str(&global_state.row_data[0..len as usize]);
+            buffer_text.push_str(&global_state.row_data[0][0..len as usize]);
         }
 
         buffer_text.push_str("\x1b[K");
@@ -177,6 +187,7 @@ pub fn show_cursor() {
     write("\x1b[?25h");
 }
 
+// main event loop
 pub fn run_editor(global_state: &mut EditorState) {
     // enable raw mode
     global_state.enable_raw_mode();
@@ -190,23 +201,23 @@ pub fn run_editor(global_state: &mut EditorState) {
     show_cursor();
 
     'outer_loop: loop {
+        // Reading bytes
         for i in stdin().bytes() {
             let c: char = i.unwrap() as char;
 
             match c {
                 'q' => break 'outer_loop,
-                'a' => global_state.cx -= 1,
-                'd' => global_state.cx += 1,
-                'w' => global_state.cy -= 1,
-                's' => global_state.cy -= 1,
                 _ => global_state.buffer_text.push(c),
             }
+
+            global_state.logger_object.log(&format!("Got Byte:: {:?}", c), LogLevel::INFORMATIONAL);
             hide_cursor();
+            set_cursor_pos(0, 0);
             clear_screen();
-            global_state.get_window_size();
-            global_state.row_data.push(c);
-            global_state.cx += 1;
-            //draw_rows(global_state);
+            // FIXME: get_window_size() function is incrementing terminal scroll buffer
+            //global_state.get_window_size();
+            global_state.row_data[0].push(c);
+            draw_rows(global_state);
             reposition_cursor(global_state);
             show_cursor();
         }
@@ -217,12 +228,12 @@ pub fn run_editor(global_state: &mut EditorState) {
 pub fn editor_open_file(filename: &str, global_state: &mut EditorState) {
     let contents = fs::read_to_string(filename).expect("Invalid file");
 
-    global_state.row_data = contents[0..10].to_string();
+    global_state.row_data.push(contents[0..10].to_string());
     global_state.num_rows = 1;
 }
 
 pub fn editor_open(global_state: &mut EditorState) {
-    global_state.row_data = String::from("Hello world");
+    global_state.row_data.push(String::from("Hello world"));
     global_state.num_rows = 1;
 }
 
@@ -236,8 +247,10 @@ pub fn create_editor_state() -> EditorState {
         cx: 0,
         cy: 0,
         num_rows: 0,
-        row_data: String::new(),
+        row_data: Vec::new(),
         status_string: String::new(),
+        x_offset: 0,
+        y_offset: 0,
         logger_object: create_logger("log.txt", LogLevel::INFORMATIONAL),
     }
 }
