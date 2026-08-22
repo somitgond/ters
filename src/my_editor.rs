@@ -6,6 +6,11 @@ use termios::*;
 
 use crate::my_logger::*;
 
+pub enum EditingStates {
+    INSERT_MODE,
+    NORMAL_MODE,
+}
+
 // EditorState: Structure to store termios and other states
 pub struct EditorState {
     pub termios_orig: Termios,
@@ -17,7 +22,7 @@ pub struct EditorState {
     pub cy: i32, // current cols value
 
     pub num_rows: i32,         // number of rows of data available
-    pub row_data: Vec<String>,      // data per row, FIXME: should be vector of num_rows
+    pub row_data: Vec<String>, // data per row, FIXME: should be vector of num_rows
     pub status_string: String, // status line string
 
     pub x_offset: i32, // denote vertical scroll offset
@@ -200,23 +205,53 @@ pub fn run_editor(global_state: &mut EditorState) {
     reposition_cursor(global_state);
     show_cursor();
 
+    let mut edit_mode = EditingStates::INSERT_MODE;
+
     'outer_loop: loop {
         // Reading bytes
         for i in stdin().bytes() {
             let c: char = i.unwrap() as char;
 
-            match c {
-                'q' => break 'outer_loop,
-                _ => global_state.buffer_text.push(c),
+            global_state
+                .logger_object
+                .log(&format!("Got Byte:: {:?}", c), LogLevel::INFORMATIONAL);
+
+            match edit_mode {
+                EditingStates::INSERT_MODE => {
+                    match c {
+                        '\u{1b}' => {
+                            edit_mode = EditingStates::NORMAL_MODE;
+                            global_state.logger_object.log(
+                                "Escape Encountered, set mode: NORMAL_MODE",
+                                LogLevel::WARNING,
+                            );
+                        }
+                        _ => global_state.buffer_text.push(c),
+                    }
+                    global_state.row_data[0].push(c);
+                }
+                EditingStates::NORMAL_MODE => match c {
+                    'Q' => break 'outer_loop,
+                    'i' => {
+                        edit_mode = EditingStates::INSERT_MODE;
+                        global_state
+                            .logger_object
+                            .log("set mode: INSERT_MODE", LogLevel::WARNING);
+                    }
+                    'j' => global_state.cy += 1,
+                    'k' => global_state.cy -= 1,
+                    'h' => global_state.cx -= 1,
+                    'l' => global_state.cx += 1,
+                    _ => {
+                        global_state.logger_object.log("NA", LogLevel::WARNING);
+                    }
+                },
             }
 
-            global_state.logger_object.log(&format!("Got Byte:: {:?}", c), LogLevel::INFORMATIONAL);
             hide_cursor();
-            set_cursor_pos(0, 0);
             clear_screen();
             // FIXME: get_window_size() function is incrementing terminal scroll buffer
             //global_state.get_window_size();
-            global_state.row_data[0].push(c);
             draw_rows(global_state);
             reposition_cursor(global_state);
             show_cursor();

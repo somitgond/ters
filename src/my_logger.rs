@@ -6,9 +6,9 @@ use std::io::Write;
 
 #[derive(PartialEq, PartialOrd)]
 pub enum LogLevel {
-    ERROR,
-    WARNING,
     INFORMATIONAL,
+    WARNING,
+    ERROR,
 }
 
 pub struct MyLogger {
