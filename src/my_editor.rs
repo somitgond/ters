@@ -7,8 +7,8 @@ use termios::*;
 use crate::my_logger::*;
 
 pub enum EditingStates {
-    INSERT_MODE,
-    NORMAL_MODE,
+    InsertMode,
+    NormalMode,
 }
 
 // EditorState: Structure to store termios and other states
@@ -205,7 +205,7 @@ pub fn run_editor(global_state: &mut EditorState) {
     reposition_cursor(global_state);
     show_cursor();
 
-    let mut edit_mode = EditingStates::INSERT_MODE;
+    let mut edit_mode = EditingStates::InsertMode;
 
     'outer_loop: loop {
         // Reading bytes
@@ -216,13 +216,16 @@ pub fn run_editor(global_state: &mut EditorState) {
                 .logger_object
                 .log(&format!("Got Byte:: {:?}", c), LogLevel::INFORMATIONAL);
 
+            // based on editing state:
+            // NORMAL mode for moving around
+            // INSERT mode to insert text
             match edit_mode {
-                EditingStates::INSERT_MODE => {
+                EditingStates::InsertMode => {
                     match c {
                         '\u{1b}' => {
-                            edit_mode = EditingStates::NORMAL_MODE;
+                            edit_mode = EditingStates::NormalMode;
                             global_state.logger_object.log(
-                                "Escape Encountered, set mode: NORMAL_MODE",
+                                "Escape Encountered, set mode: NormalMode",
                                 LogLevel::WARNING,
                             );
                         }
@@ -230,13 +233,15 @@ pub fn run_editor(global_state: &mut EditorState) {
                     }
                     global_state.row_data[0].push(c);
                 }
-                EditingStates::NORMAL_MODE => match c {
+
+                // move around
+                EditingStates::NormalMode => match c {
                     'Q' => break 'outer_loop,
                     'i' => {
-                        edit_mode = EditingStates::INSERT_MODE;
+                        edit_mode = EditingStates::InsertMode;
                         global_state
                             .logger_object
-                            .log("set mode: INSERT_MODE", LogLevel::WARNING);
+                            .log("set mode: InsertMode", LogLevel::WARNING);
                     }
                     'j' => global_state.cy += 1,
                     'k' => global_state.cy -= 1,
@@ -247,7 +252,6 @@ pub fn run_editor(global_state: &mut EditorState) {
                     }
                 },
             }
-
             hide_cursor();
             clear_screen();
             // FIXME: get_window_size() function is incrementing terminal scroll buffer
