@@ -1,7 +1,7 @@
 // Editor Struct and related functions
-use std::fs;
 use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
+use std::{cmp, fs};
 use termios::*;
 
 use crate::my_logger::*;
@@ -22,7 +22,7 @@ pub struct EditorState {
     pub cy: i32, // current cols value
 
     pub num_rows: i32,         // number of rows of data available
-    pub row_data: Vec<String>, // data per row, FIXME: should be vector of num_rows
+    pub row_data: Vec<String>, // data per row
     pub status_string: String, // status line string
 
     pub x_offset: i32, // denote vertical scroll offset
@@ -140,6 +140,7 @@ pub fn set_cursor_pos(x: i32, y: i32) {
 }
 
 pub fn draw_rows(global_state: &mut EditorState) {
+    set_cursor_pos(0, 0);
     let mut buffer_text = String::new();
     for y in 0..global_state.rows {
         // if row data exists, show data first
@@ -164,14 +165,14 @@ pub fn draw_rows(global_state: &mut EditorState) {
                 buffer_text.push('~');
             }
         } else {
-            let mut len = global_state.row_data[0].len() as i32;
+            let mut len = global_state.row_data[y as usize].len() as i32;
 
             // if data length is > than cols
             if len > global_state.cols {
                 len = global_state.cols;
             }
 
-            buffer_text.push_str(&global_state.row_data[0][0..len as usize]);
+            buffer_text.push_str(&global_state.row_data[y as usize][0..len as usize]);
         }
 
         buffer_text.push_str("\x1b[K");
@@ -200,7 +201,7 @@ pub fn run_editor(global_state: &mut EditorState) {
 
     clear_screen();
     hide_cursor();
-    //global_state.get_window_size();
+    global_state.get_window_size();
     draw_rows(global_state);
     reposition_cursor(global_state);
     show_cursor();
@@ -220,6 +221,7 @@ pub fn run_editor(global_state: &mut EditorState) {
             // NORMAL mode for moving around
             // INSERT mode to insert text
             match edit_mode {
+                // add text
                 EditingStates::InsertMode => {
                     match c {
                         '\u{1b}' => {
@@ -229,9 +231,23 @@ pub fn run_editor(global_state: &mut EditorState) {
                                 LogLevel::WARNING,
                             );
                         }
-                        _ => global_state.buffer_text.push(c),
+                        '\r' => {
+                            // storing stores in a vector<String>
+                            global_state.num_rows += 1;
+                            global_state.row_data.push(String::new());
+                            global_state.cy += 1;
+                            global_state.cx = 0;
+                        }
+                        _ => {
+                            //global_state.buffer_text.push(c);
+                            // find the row on which user is currently at then push data into that row at that position
+                            // you can find position by considering x,y coordinates
+                            global_state.row_data
+                                [(cmp::max(0, global_state.num_rows - 1)) as usize]
+                                .push(c);
+                            global_state.cx += 1;
+                        }
                     }
-                    global_state.row_data[0].push(c);
                 }
 
                 // move around
@@ -243,6 +259,9 @@ pub fn run_editor(global_state: &mut EditorState) {
                             .logger_object
                             .log("set mode: InsertMode", LogLevel::WARNING);
                     }
+                    // FIXME: limit number of rows and cols user can move to
+                    // rows: Number of actual rows
+                    // cols: max width of current
                     'j' => global_state.cy += 1,
                     'k' => global_state.cy -= 1,
                     'h' => global_state.cx -= 1,
@@ -253,7 +272,7 @@ pub fn run_editor(global_state: &mut EditorState) {
                 },
             }
             hide_cursor();
-            clear_screen();
+            //clear_screen();
             // FIXME: get_window_size() function is incrementing terminal scroll buffer
             //global_state.get_window_size();
             draw_rows(global_state);
@@ -266,14 +285,15 @@ pub fn run_editor(global_state: &mut EditorState) {
 // open file and fill row values
 pub fn editor_open_file(filename: &str, global_state: &mut EditorState) {
     let contents = fs::read_to_string(filename).expect("Invalid file");
+    // fill contents in vec<string> with each index separated by a newline
 
-    global_state.row_data.push(contents[0..10].to_string());
-    global_state.num_rows = 1;
+    global_state.row_data.push(contents[..].to_string());
+    global_state.num_rows = 2;
 }
 
 pub fn editor_open(global_state: &mut EditorState) {
-    global_state.row_data.push(String::from("Hello world"));
-    global_state.num_rows = 1;
+    global_state.row_data.push(String::new());
+    global_state.num_rows = 1; // start with 1 rows
 }
 
 // create editor state
@@ -293,3 +313,7 @@ pub fn create_editor_state() -> EditorState {
         logger_object: create_logger("log.txt", LogLevel::INFORMATIONAL),
     }
 }
+
+// FIXME:
+// 1. add support for editing files
+// 2. reading and writing files
