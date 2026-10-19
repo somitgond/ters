@@ -1,7 +1,7 @@
 // Editor Struct and related functions
+use std::fs;
 use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
-use std::{cmp, fs};
 use termios::*;
 
 use crate::my_logger::*;
@@ -14,9 +14,8 @@ pub enum EditingStates {
 // EditorState: Structure to store termios and other states
 pub struct EditorState {
     pub termios_orig: Termios,
-    pub rows: i32,           // total rows in the terminal
-    pub cols: i32,           // total columns in the terminal
-    pub buffer_text: String, // buffer text to display
+    pub rows: i32, // total rows in the terminal
+    pub cols: i32, // total columns in the terminal
 
     pub cx: i32, // current row value
     pub cy: i32, // current cols value
@@ -142,7 +141,7 @@ pub fn set_cursor_pos(x: i32, y: i32) {
 pub fn draw_rows(global_state: &mut EditorState) {
     set_cursor_pos(0, 0);
     let mut buffer_text = String::new();
-    for y in 0..global_state.rows {
+    for y in global_state.y_offset..global_state.rows - 1 {
         // if row data exists, show data first
         if y >= global_state.num_rows {
             // show editor version at startup
@@ -167,21 +166,29 @@ pub fn draw_rows(global_state: &mut EditorState) {
         } else {
             let mut len = global_state.row_data[y as usize].len() as i32;
 
-            // if data length is > than cols
+            // if data length is > than cols, get cols number of data only
             if len > global_state.cols {
                 len = global_state.cols;
             }
 
-            buffer_text.push_str(&global_state.row_data[y as usize][0..len as usize]);
+            buffer_text.push_str(
+                &global_state.row_data[y as usize][global_state.x_offset as usize..len as usize],
+            );
         }
 
         buffer_text.push_str("\x1b[K");
 
         // tilde on last line also
-        if y < global_state.rows - 1 {
+        if y < global_state.rows - 2 {
             buffer_text.push_str("\r\n");
         }
     }
+    // status line on the last row
+    buffer_text.push_str(&format!(
+        "\t\t\t\t\t\t\t\tx: {}/{}, y: {}/{}",
+        global_state.cx, global_state.rows, global_state.cy, global_state.cols
+    ));
+
     write(&buffer_text);
 }
 
@@ -224,6 +231,7 @@ pub fn run_editor(global_state: &mut EditorState) {
                 // add text
                 EditingStates::InsertMode => {
                     match c {
+                        // FIXME: handle arrow-keys and backspace
                         '\u{1b}' => {
                             edit_mode = EditingStates::NormalMode;
                             global_state.logger_object.log(
@@ -234,22 +242,26 @@ pub fn run_editor(global_state: &mut EditorState) {
                         '\r' => {
                             // storing stores in a vector<String>
                             global_state.num_rows += 1;
-                            global_state.row_data.push(String::new());
+                            global_state.row_data.push(String::from(""));
                             global_state.cy += 1;
                             global_state.cx = 0;
+
+                            // if return pressed and current row number is greater than number of
+                            // rows in terminal, increment y_offset
+                            if global_state.cy > global_state.rows {
+                                global_state.y_offset += 1;
+                            }
                         }
                         _ => {
                             //global_state.buffer_text.push(c);
                             // find the row on which user is currently at then push data into that row at that position
                             // you can find position by considering x,y coordinates
-                            global_state.row_data
-                                [(cmp::max(0, global_state.num_rows - 1)) as usize]
-                                .push(c);
+                            global_state.row_data[global_state.cy as usize].push(c);
                             global_state.cx += 1;
+                            // global_state.cy = global_state.row_data[global_state.cy as usize].len() as i32;
                         }
                     }
                 }
-
                 // move around
                 EditingStates::NormalMode => match c {
                     'Q' => break 'outer_loop,
@@ -261,11 +273,63 @@ pub fn run_editor(global_state: &mut EditorState) {
                     }
                     // FIXME: limit number of rows and cols user can move to
                     // rows: Number of actual rows
-                    // cols: max width of current
-                    'j' => global_state.cy += 1,
-                    'k' => global_state.cy -= 1,
-                    'h' => global_state.cx -= 1,
-                    'l' => global_state.cx += 1,
+                    // cols: max width of current row
+                    'j' => {
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}, num_rows: {}", global_state.cx, global_state.cy, global_state.num_rows),
+                            LogLevel::INFORMATIONAL,);
+                        if global_state.cy < global_state.num_rows {
+                            global_state.cy += 1;
+                            if global_state.row_data.len() as i32 > global_state.cy {
+                                let len = global_state.row_data[global_state.cy as usize].len() as i32;
+                                if global_state.cx > len {
+                                    global_state.cx = len;
+                                }
+                            }
+                            if global_state.cy > global_state.rows {
+                                global_state.y_offset += 1;
+                            }
+                        }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
+                            LogLevel::INFORMATIONAL,);
+                    }
+                    'k' => {
+                        if global_state.cy > 0 {
+                            global_state.cy -= 1;
+                            if global_state.cy < global_state.y_offset {
+                                global_state.y_offset -= 1;
+                            }
+                            let len = global_state.row_data[global_state.cy as usize].len() as i32;
+                            if global_state.cx > len {
+                                global_state.cx = len;
+                            }
+                        }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
+                            LogLevel::INFORMATIONAL,);
+                    }
+                    'h' => {
+                        if(global_state.cx > 0)
+                        {
+                            global_state.cx -= 1;
+                            if global_state.cx < global_state.x_offset {
+                                global_state.x_offset -= 1;
+                            }
+                        }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
+                            LogLevel::INFORMATIONAL,);
+                    }
+                    'l' => {
+                        global_state.cx += 1;
+                        if global_state.cx > global_state.x_offset {
+                            global_state.x_offset += 1;
+                        }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
+                            LogLevel::INFORMATIONAL,);
+                    }
                     _ => {
                         global_state.logger_object.log("NA", LogLevel::WARNING);
                     }
@@ -302,7 +366,6 @@ pub fn create_editor_state() -> EditorState {
         termios_orig: Termios::from_fd(stdin().as_raw_fd()).unwrap(),
         rows: 0,
         cols: 0,
-        buffer_text: String::new(),
         cx: 0,
         cy: 0,
         num_rows: 0,
@@ -315,5 +378,11 @@ pub fn create_editor_state() -> EditorState {
 }
 
 // FIXME:
+// 0. find cursor position at the start and restore that at exit
 // 1. add support for editing files
 // 2. reading and writing files
+//
+//
+//
+// TODO:
+// I. make a text viewer: with correct scroll (broken currently)
