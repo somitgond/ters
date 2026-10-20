@@ -1,7 +1,7 @@
 // Editor Struct and related functions
-use std::fs;
 use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
+use std::{cmp, fs};
 use termios::*;
 
 use crate::my_logger::*;
@@ -241,8 +241,8 @@ pub fn run_editor(global_state: &mut EditorState) {
                         }
                         '\r' => {
                             // storing stores in a vector<String>
-                            global_state.num_rows += 1;
                             global_state.row_data.push(String::from(""));
+                            global_state.num_rows = global_state.row_data.len() as i32;
                             global_state.cy += 1;
                             global_state.cx = 0;
 
@@ -251,7 +251,7 @@ pub fn run_editor(global_state: &mut EditorState) {
                             if global_state.cy > global_state.rows {
                                 global_state.y_offset += 1;
                             }
-                        }
+                        },
                         _ => {
                             //global_state.buffer_text.push(c);
                             // find the row on which user is currently at then push data into that row at that position
@@ -275,24 +275,16 @@ pub fn run_editor(global_state: &mut EditorState) {
                     // rows: Number of actual rows
                     // cols: max width of current row
                     'j' => {
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}, num_rows: {}", global_state.cx, global_state.cy, global_state.num_rows),
-                            LogLevel::INFORMATIONAL,);
-                        if global_state.cy < global_state.num_rows {
+                        if global_state.cy >= 0 && global_state.cy < global_state.num_rows - 1 {
                             global_state.cy += 1;
-                            if global_state.row_data.len() as i32 > global_state.cy {
-                                let len = global_state.row_data[global_state.cy as usize].len() as i32;
-                                if global_state.cx > len {
-                                    global_state.cx = len;
-                                }
+                            let len = global_state.row_data[global_state.cy as usize].len() as i32;
+                            if global_state.cx > len {
+                                global_state.cx = len;
                             }
                             if global_state.cy > global_state.rows {
                                 global_state.y_offset += 1;
                             }
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
-                            LogLevel::INFORMATIONAL,);
                     }
                     'k' => {
                         if global_state.cy > 0 {
@@ -305,30 +297,24 @@ pub fn run_editor(global_state: &mut EditorState) {
                                 global_state.cx = len;
                             }
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
-                            LogLevel::INFORMATIONAL,);
                     }
                     'h' => {
-                        if(global_state.cx > 0)
-                        {
+                        if global_state.cx > 0 {
                             global_state.cx -= 1;
                             if global_state.cx < global_state.x_offset {
                                 global_state.x_offset -= 1;
                             }
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
-                            LogLevel::INFORMATIONAL,);
                     }
                     'l' => {
-                        global_state.cx += 1;
-                        if global_state.cx > global_state.x_offset {
-                            global_state.x_offset += 1;
+                        // what about offset
+                        if global_state.cx + global_state.x_offset < global_state.row_data[global_state.cy as usize].len() as i32 {
+                            global_state.cx += 1;
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}", global_state.cx, global_state.cy),
-                            LogLevel::INFORMATIONAL,);
+
+                        // if global_state.cx > global_state.x_offset {
+                        //     global_state.x_offset += 1;
+                        // }
                     }
                     _ => {
                         global_state.logger_object.log("NA", LogLevel::WARNING);
