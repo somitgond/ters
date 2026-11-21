@@ -1,7 +1,7 @@
 // Editor Struct and related functions
+use std::fs;
 use std::io::{Read, Write, stdin, stdout};
 use std::os::fd::AsRawFd;
-use std::{cmp, fs};
 use termios::*;
 
 use crate::my_logger::*;
@@ -141,7 +141,7 @@ pub fn set_cursor_pos(x: i32, y: i32) {
 pub fn draw_rows(global_state: &mut EditorState) {
     set_cursor_pos(0, 0);
     let mut buffer_text = String::new();
-    for y in global_state.y_offset..global_state.rows - 1 {
+    for y in global_state.y_offset..(global_state.y_offset + global_state.rows - 1) {
         // if row data exists, show data first
         if y >= global_state.num_rows {
             // show editor version at startup
@@ -172,21 +172,21 @@ pub fn draw_rows(global_state: &mut EditorState) {
             }
 
             buffer_text.push_str(
-                &global_state.row_data[y as usize][global_state.x_offset as usize..len as usize],
+                &global_state.row_data[y as usize][global_state.x_offset as usize..(global_state.x_offset + len) as usize],
             );
         }
 
         buffer_text.push_str("\x1b[K");
 
         // tilde on last line also
-        if y < global_state.rows - 2 {
+        if y < global_state.y_offset + global_state.rows - 2 {
             buffer_text.push_str("\r\n");
         }
     }
     // status line on the last row
     buffer_text.push_str(&format!(
         "\t\t\t\t\t\t\t\tx: {}/{}, y: {}/{}",
-        global_state.cx, global_state.rows, global_state.cy, global_state.cols
+        global_state.cy, global_state.rows, global_state.cx, global_state.cols
     ));
 
     write(&buffer_text);
@@ -251,7 +251,7 @@ pub fn run_editor(global_state: &mut EditorState) {
                             if global_state.cy > global_state.rows {
                                 global_state.y_offset += 1;
                             }
-                        },
+                        }
                         _ => {
                             //global_state.buffer_text.push(c);
                             // find the row on which user is currently at then push data into that row at that position
@@ -262,7 +262,7 @@ pub fn run_editor(global_state: &mut EditorState) {
                         }
                     }
                 }
-                // move around
+                // move around in NormalMode
                 EditingStates::NormalMode => match c {
                     'Q' => break 'outer_loop,
                     'i' => {
@@ -281,10 +281,15 @@ pub fn run_editor(global_state: &mut EditorState) {
                             if global_state.cx > len {
                                 global_state.cx = len;
                             }
+
                             if global_state.cy > global_state.rows {
                                 global_state.y_offset += 1;
                             }
                         }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
+                            LogLevel::INFORMATIONAL,
+                        );
                     }
                     'k' => {
                         if global_state.cy > 0 {
@@ -292,11 +297,15 @@ pub fn run_editor(global_state: &mut EditorState) {
                             if global_state.cy < global_state.y_offset {
                                 global_state.y_offset -= 1;
                             }
-                            let len = global_state.row_data[global_state.cy as usize].len() as i32;
-                            if global_state.cx > len {
-                                global_state.cx = len;
-                            }
+                            //let len = global_state.row_data[global_state.cy as usize].len() as i32;
+                            //if global_state.cx > len {
+                            //    global_state.cx = len;
+                            //}
                         }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
+                            LogLevel::INFORMATIONAL,
+                        );
                     }
                     'h' => {
                         if global_state.cx > 0 {
@@ -305,16 +314,26 @@ pub fn run_editor(global_state: &mut EditorState) {
                                 global_state.x_offset -= 1;
                             }
                         }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
+                            LogLevel::INFORMATIONAL,
+                        );
                     }
                     'l' => {
                         // what about offset
-                        if global_state.cx + global_state.x_offset < global_state.row_data[global_state.cy as usize].len() as i32 {
+                        if global_state.cx + global_state.x_offset
+                            < global_state.row_data[global_state.cy as usize].len() as i32
+                        {
                             global_state.cx += 1;
                         }
 
                         // if global_state.cx > global_state.x_offset {
                         //     global_state.x_offset += 1;
                         // }
+                        global_state.logger_object.log(
+                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
+                            LogLevel::INFORMATIONAL,
+                        );
                     }
                     _ => {
                         global_state.logger_object.log("NA", LogLevel::WARNING);
@@ -334,11 +353,16 @@ pub fn run_editor(global_state: &mut EditorState) {
 
 // open file and fill row values
 pub fn editor_open_file(filename: &str, global_state: &mut EditorState) {
-    let contents = fs::read_to_string(filename).expect("Invalid file");
+    let contents: Vec<String> = fs::read_to_string(filename)
+        .expect("Invalid file")
+        .lines()
+        .map(str::to_string)
+        .collect();
+
     // fill contents in vec<string> with each index separated by a newline
 
-    global_state.row_data.push(contents[..].to_string());
-    global_state.num_rows = 2;
+    global_state.row_data = contents.clone();
+    global_state.num_rows = contents.len() as i32;
 }
 
 pub fn editor_open(global_state: &mut EditorState) {
