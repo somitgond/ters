@@ -109,7 +109,7 @@ impl Drop for EditorState {
         reposition_cursor(self);
         self.disable_raw_mode();
         self.logger_object
-            .log("Drop called: Disabled raw mode", LogLevel::INFORMATIONAL);
+            .log("Drop called: Disabled raw mode", LogLevel::ERROR);
     }
 }
 
@@ -184,10 +184,10 @@ pub fn draw_rows(global_state: &mut EditorState) {
         }
     }
     // status line on the last row
-    buffer_text.push_str(&format!(
-        "\t\t\t\t\t\t\t\tx: {}/{}, y: {}/{}",
-        global_state.cy, global_state.rows, global_state.cx, global_state.cols
-    ));
+    // buffer_text.push_str(&format!(
+    //     "\t\t\t\t\t\t\t\tx: {}/{}, y: {}/{}",
+    //     global_state.cy, global_state.rows, global_state.cx, global_state.cols
+    // ));
 
     write(&buffer_text);
 }
@@ -275,65 +275,65 @@ pub fn run_editor(global_state: &mut EditorState) {
                     // rows: Number of actual rows
                     // cols: max width of current row
                     'j' => {
-                        if global_state.cy >= 0 && global_state.cy < global_state.num_rows - 1 {
+                        if global_state.cy >= 0 && global_state.cy < global_state.num_rows - 1 &&
+                            global_state.cy + global_state.y_offset < global_state.num_rows {
                             global_state.cy += 1;
-                            let len = global_state.row_data[global_state.cy as usize].len() as i32;
-                            if global_state.cx > len {
-                                global_state.cx = len;
+                            if global_state.cy >= global_state.rows {
+                                global_state.y_offset += 1;
+                                global_state.cy = global_state.rows-1;
                             }
 
-                            if global_state.cy > global_state.rows {
-                                global_state.y_offset += 1;
+                            if global_state.cy + global_state.y_offset < global_state.row_data.len() as i32 {
+                                let len = global_state.row_data[(global_state.cy + global_state.y_offset) as usize].len() as i32;
+                                if global_state.cx > len {
+                                    global_state.cx = len;
+                                }
                             }
+
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
-                            LogLevel::INFORMATIONAL,
-                        );
                     }
                     'k' => {
-                        if global_state.cy > 0 {
+                        if global_state.cy >= 0 {
                             global_state.cy -= 1;
-                            if global_state.cy < global_state.y_offset {
-                                global_state.y_offset -= 1;
+                            if global_state.cy < 0 {
+                                global_state.cy = 0;
+                                if global_state.y_offset > 0 {
+                                    global_state.y_offset -= 1;
+                                }
                             }
-                            //let len = global_state.row_data[global_state.cy as usize].len() as i32;
-                            //if global_state.cx > len {
-                            //    global_state.cx = len;
-                            //}
+
+                            let len = global_state.row_data[(global_state.cy + global_state.y_offset) as usize].len() as i32;
+                            if global_state.cx > len {
+                               global_state.cx = len;
+                            }
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
-                            LogLevel::INFORMATIONAL,
-                        );
                     }
                     'h' => {
                         if global_state.cx > 0 {
                             global_state.cx -= 1;
-                            if global_state.cx < global_state.x_offset {
-                                global_state.x_offset -= 1;
+
+                            if global_state.cx < 0 {
+                                global_state.cx = 0;
+                                if global_state.x_offset > 0 {
+                                    global_state.x_offset -= 1;
+                                }
                             }
                         }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
-                            LogLevel::INFORMATIONAL,
-                        );
                     }
                     'l' => {
                         // what about offset
-                        if global_state.cx + global_state.x_offset
-                            < global_state.row_data[global_state.cy as usize].len() as i32
-                        {
-                            global_state.cx += 1;
+                        if global_state.cy + global_state.y_offset < global_state.row_data.len() as i32 {
+
+                            if global_state.cx + global_state.x_offset
+                                < global_state.row_data[(global_state.cy + global_state.y_offset) as usize].len() as i32
+                            {
+                                global_state.cx += 1;
+                            }
                         }
 
                         // if global_state.cx > global_state.x_offset {
                         //     global_state.x_offset += 1;
                         // }
-                        global_state.logger_object.log(
-                            &format!("cx: {}, cy: {}, x_offset: {}, y_offset: {}", global_state.cx, global_state.cy, global_state.x_offset, global_state.y_offset),
-                            LogLevel::INFORMATIONAL,
-                        );
                     }
                     _ => {
                         global_state.logger_object.log("NA", LogLevel::WARNING);
